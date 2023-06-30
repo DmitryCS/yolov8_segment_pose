@@ -1,0 +1,54 @@
+name: "yolov8_segpose_postprocessing"
+platform: "pytorch_libtorch"
+
+max_batch_size : 16
+dynamic_batching {
+    preferred_batch_size: [ 8 ]
+    max_queue_delay_microseconds: 10000
+}
+
+input [
+  {
+    name: "INPUT__0"
+    data_type: TYPE_FP32
+    dims: [ 88, 8400 ]
+  },
+  {
+    name: "INPUT__1"
+    data_type: TYPE_FP32
+    dims: [ 32, 160, 160 ]
+  }
+]
+output [
+  {
+    name: "OUTPUT__0"
+    data_type: TYPE_FP32
+    dims: [ 100, 4 ]
+  },
+  {
+    name: "OUTPUT__1"
+    data_type: TYPE_FP32
+    dims: [ 100, 1 ]
+  },
+  {
+    name: "OUTPUT__2"
+    data_type: TYPE_FP32
+    dims: [ 100, 1 ]
+  },
+  {
+    name: "OUTPUT__3"
+    data_type: TYPE_FP32
+    dims: [ 100, 160, 160 ]
+  },
+  {
+    name: "OUTPUT__4"
+    data_type: TYPE_FP32
+    dims: [ 100, 17, 3 ]
+  }
+]
+parameters: {
+key: "DISABLE_OPTIMIZED_EXECUTION"
+    value: {
+    string_value:"true"
+    }
+}

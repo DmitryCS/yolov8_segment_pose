@@ -85,6 +85,7 @@ def build_yolo_dataset(cfg, img_path, batch, data, mode='train', rect=False, str
         prefix=colorstr(f'{mode}: '),
         use_segments=cfg.task == 'segment',
         use_keypoints=cfg.task == 'pose',
+        use_segments_keypoints=cfg.task=='segment_pose',
         classes=cfg.classes,
         data=data,
         fraction=cfg.fraction if mode == 'train' else 1.0)

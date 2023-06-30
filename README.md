@@ -1,5 +1,11 @@
 <div align="center">
   <p>
+    <a target="_blank">
+      <img width="31%" src="assets/000000001000.jpg"></a>
+      <img width="35%" src="assets/000000000785.jpg"></a>
+      <img width="31%" src="assets/test.jpg"></a>
+  </p>
+  <p>
     <a href="https://ultralytics.com/yolov8" target="_blank">
       <img width="100%" src="https://raw.githubusercontent.com/ultralytics/assets/main/yolov8/banner-yolov8.png"></a>
   </p>
@@ -112,7 +118,7 @@ YOLOv8 [Detect](https://docs.ultralytics.com/tasks/detect), [Segment](https://do
 
 All [Models](https://github.com/ultralytics/ultralytics/tree/main/ultralytics/models) download automatically from the latest Ultralytics [release](https://github.com/ultralytics/assets/releases) on first use.
 
-<details open><summary>Detection</summary>
+<details><summary>Detection</summary>
 
 See [Detection Docs](https://docs.ultralytics.com/tasks/detect/) for usage examples with these models.
 
@@ -189,6 +195,41 @@ See [Pose Docs](https://docs.ultralytics.com/tasks/pose) for usage examples with
   <br>Reproduce by `yolo val pose data=coco8-pose.yaml batch=1 device=0|cpu`
 
 </details>
+
+
+<details open><summary>SegmentationPose</summary>
+The model is a combination of person segmentation and pose, trained on the COCO dataset. As you know, the COCO dataset for the person class has 64115/56599 images for segmentation/pose in train, and 2693/2346 in validation. In addition, even on marked up images, the pose is marked only on people in the foreground, so for this task, the unmarked pose of people is replaced by 3 * 17 zeros. From here, boxing and segmentation metrics can be compared with other models by class person, but <b>the pose metric does not match the pose task</b>.<br>
+Dataset annotation has yolov8 format(label box pose segm), labels `label_idx x1 y1 x2 y2 xp1 xp1 vp1 xp2 xp2 vp2 ...(17*3keypoints) xs1 ys1 xs2 ys2 ...(N*2segm_points)`.<br>
+Trained 80 classes yolov8n-seg.pt by class person has mAP<sup>box/seg</sup>=51.5/40.1 and trained yolov8n-seg.pt only on class person has mAP<sup>box/seg</sup>=52.9/43.2, in the same time yolov8n-segpose.pt has mAP<sup>box/seg</sup>=50.8/41.5, so segpose model is slightly weaker in accuracy, but I did not change the architecture of the model at all, I only merged the last layer of the model. Open to suggestions for improvement.<br>
+Example model usage(my case): if you have inference server like triton and several working modules with different requirements(boxes, pose, masks), you can infer frame 1 time and send results to all modules. This way we can have optimization of resource usage at the model level.
+
+| Model                                                                                        | size<br><sup>(pixels) | mAP<sup>box<br>50-95 | mAP<sup>mask<br>50-95 | mAP<sup>pose<br>50-95 | Speed<br><sup>CPU ONNX<br>(ms) | Speed<br><sup>A100 TensorRT<br>(ms) | params<br><sup>(M) | FLOPs<br><sup>(B) |
+| -------------------------------------------------------------------------------------------- | --------------------- | -------------------- | --------------------- | --------------------- | ------------------------------ | ----------------------------------- | ------------------ | ----------------- |
+| [YOLOv8n-segpose](https://disk.yandex.ru/d/8mRbwuKc-vGfCg) | 640                   | 50.8                 | 41.5                  | 23.2                           | -                           | -                                | 3.5                | 13.1              |
+| [YOLOv8s-segpose](https://disk.yandex.ru/d/8mRbwuKc-vGfCg) | 640                   | 56.5                 | 46.6                  | 28.4                           | -                          | -                                | 12.3               | 44.2              |
+| [YOLOv8m-segpose](https://disk.yandex.ru/d/8mRbwuKc-vGfCg) | 640                   | 62.3                 | 52.0                  | 36.3                           | -                          | -                                | 27.8               | 112.3             |
+| [YOLOv8l-segpose](https://disk.yandex.ru/d/8mRbwuKc-vGfCg) | 640                   | -                 | -                  | -                           | -                          | -                                | 46.8               | 223.9             |
+| [YOLOv8x-segpose](https://disk.yandex.ru/d/8mRbwuKc-vGfCg) | 640                   | 64.9                 | 54.6                  | 37.1                           | -                          | -                                | 73.1               | 349.5             |
+
+- **mAP<sup>val</sup>** values are for single-model single-scale on [COCO val2017](http://cocodataset.org) dataset.
+  <br>Reproduce by `python3 segment_pose.py --mode=val --weights=yolov8m-segpose.pt --model=m`
+
+- **Train** 
+  <br>Reproduce by `python3 segment_pose.py --mode=train --weights=yolov8m-seg.pt --model=m`
+
+- **Export** 
+  <br>Reproduce by `python3 segment_pose.py --mode=export --weights=yolov8m-segpose.pt --model=m`
+
+- **Export triton postprocess** 
+  <br>Reproduce by `python3 triton/export/segment_pose/export_yolov8_segpose_postprocessing_to_torchscipt.py --path_onnx_file=yolov8m-segpose.onnx`
+
+- **Inference triton without torch** 
+  <br>Reproduce by `python3 triton/deploy/client_example_segpose.py`
+
+- **Predict image** 
+  <br>Reproduce by `python3 segment_pose.py --mode=predict --weights=yolov8m-segpose.pt --model=m --images ultralytics/assets/bus.jpg --images ultralytics/assets/zidane.jpg`
+</details>
+
 
 ## <div align="center">Integrations</div>
 

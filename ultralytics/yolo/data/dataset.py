@@ -13,7 +13,7 @@ from tqdm import tqdm
 from ..utils import LOCAL_RANK, NUM_THREADS, TQDM_BAR_FORMAT, is_dir_writeable
 from .augment import Compose, Format, Instances, LetterBox, classify_albumentations, classify_transforms, v8_transforms
 from .base import BaseDataset
-from .utils import HELP_URL, LOGGER, get_hash, img2label_paths, verify_image_label
+from .utils import HELP_URL, LOGGER, get_hash, img2label_paths, verify_image_label, verify_image_label_seg_pose
 
 
 class YOLODataset(BaseDataset):
@@ -31,9 +31,10 @@ class YOLODataset(BaseDataset):
     cache_version = '1.0.2'  # dataset labels *.cache version, >= 1.0.0 for YOLOv8
     rand_interp_methods = [cv2.INTER_NEAREST, cv2.INTER_LINEAR, cv2.INTER_CUBIC, cv2.INTER_AREA, cv2.INTER_LANCZOS4]
 
-    def __init__(self, *args, data=None, use_segments=False, use_keypoints=False, **kwargs):
+    def __init__(self, *args, data=None, use_segments=False, use_keypoints=False, use_segments_keypoints=False, **kwargs):
         self.use_segments = use_segments
         self.use_keypoints = use_keypoints
+        self.use_segments_keypoints = use_segments_keypoints
         self.data = data
         assert not (self.use_segments and self.use_keypoints), 'Can not use both segments and keypoints.'
         super().__init__(*args, **kwargs)
@@ -53,32 +54,60 @@ class YOLODataset(BaseDataset):
         if self.use_keypoints and (nkpt <= 0 or ndim not in (2, 3)):
             raise ValueError("'kpt_shape' in data.yaml missing or incorrect. Should be a list with [number of "
                              "keypoints, number of dims (2 for x,y or 3 for x,y,visible)], i.e. 'kpt_shape: [17, 3]'")
-        with ThreadPool(NUM_THREADS) as pool:
-            results = pool.imap(func=verify_image_label,
-                                iterable=zip(self.im_files, self.label_files, repeat(self.prefix),
-                                             repeat(self.use_keypoints), repeat(len(self.data['names'])), repeat(nkpt),
-                                             repeat(ndim)))
-            pbar = tqdm(results, desc=desc, total=total, bar_format=TQDM_BAR_FORMAT)
-            for im_file, lb, shape, segments, keypoint, nm_f, nf_f, ne_f, nc_f, msg in pbar:
-                nm += nm_f
-                nf += nf_f
-                ne += ne_f
-                nc += nc_f
-                if im_file:
-                    x['labels'].append(
-                        dict(
-                            im_file=im_file,
-                            shape=shape,
-                            cls=lb[:, 0:1],  # n, 1
-                            bboxes=lb[:, 1:],  # n, 4
-                            segments=segments,
-                            keypoints=keypoint,
-                            normalized=True,
-                            bbox_format='xywh'))
-                if msg:
-                    msgs.append(msg)
-                pbar.desc = f'{desc} {nf} images, {nm + ne} backgrounds, {nc} corrupt'
-            pbar.close()
+        if not self.use_segments_keypoints:
+            with ThreadPool(NUM_THREADS) as pool:
+                results = pool.imap(func=verify_image_label,
+                                    iterable=zip(self.im_files, self.label_files, repeat(self.prefix),
+                                                repeat(self.use_keypoints), repeat(len(self.data['names'])), repeat(nkpt),
+                                                repeat(ndim)))
+                pbar = tqdm(results, desc=desc, total=total, bar_format=TQDM_BAR_FORMAT)
+                for im_file, lb, shape, segments, keypoint, nm_f, nf_f, ne_f, nc_f, msg in pbar:
+                    nm += nm_f
+                    nf += nf_f
+                    ne += ne_f
+                    nc += nc_f
+                    if im_file:
+                        x['labels'].append(
+                            dict(
+                                im_file=im_file,
+                                shape=shape,
+                                cls=lb[:, 0:1],  # n, 1
+                                bboxes=lb[:, 1:],  # n, 4
+                                segments=segments,
+                                keypoints=keypoint,
+                                normalized=True,
+                                bbox_format='xywh'))
+                    if msg:
+                        msgs.append(msg)
+                    pbar.desc = f'{desc} {nf} images, {nm + ne} backgrounds, {nc} corrupt'
+                pbar.close()
+        else:
+            with ThreadPool(NUM_THREADS) as pool:
+                results = pool.imap(func=verify_image_label_seg_pose,
+                                    iterable=zip(self.im_files, self.label_files, repeat(self.prefix),
+                                                repeat(self.use_keypoints), repeat(len(self.data['names'])), repeat(nkpt),
+                                                repeat(ndim)))
+                pbar = tqdm(results, desc=desc, total=total, bar_format=TQDM_BAR_FORMAT)
+                for im_file, lb, shape, segments, keypoint, nm_f, nf_f, ne_f, nc_f, msg in pbar:
+                    nm += nm_f
+                    nf += nf_f
+                    ne += ne_f
+                    nc += nc_f
+                    if im_file:
+                        x['labels'].append(
+                            dict(
+                                im_file=im_file,
+                                shape=shape,
+                                cls=lb[:, 0:1],  # n, 1
+                                bboxes=lb[:, 1:],  # n, 4
+                                segments=segments,
+                                keypoints=keypoint,
+                                normalized=True,
+                                bbox_format='xywh'))
+                    if msg:
+                        msgs.append(msg)
+                    pbar.desc = f'{desc} {nf} images, {nm + ne} backgrounds, {nc} corrupt'
+                pbar.close()
 
         if msgs:
             LOGGER.info('\n'.join(msgs))
@@ -153,8 +182,8 @@ class YOLODataset(BaseDataset):
         transforms.append(
             Format(bbox_format='xywh',
                    normalize=True,
-                   return_mask=self.use_segments,
-                   return_keypoint=self.use_keypoints,
+                   return_mask=self.use_segments or self.use_segments_keypoints,
+                   return_keypoint=self.use_keypoints or self.use_segments_keypoints,
                    batch_idx=True,
                    mask_ratio=hyp.mask_ratio,
                    mask_overlap=hyp.overlap_mask))

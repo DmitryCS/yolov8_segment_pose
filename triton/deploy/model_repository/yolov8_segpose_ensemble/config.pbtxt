@@ -1,0 +1,112 @@
+#  Description model people detection:
+#  Input expects image format CHW color RGB resized to 640x640 type float32 0...1 (achieved through division uint8 on 255)
+#  with save width-height proportion through padding [top, bottom, left, right].
+#  For example image 1920x1080 -> 640x360 -> padding [140, 140,    0,    0] = 640x640.
+#  Outputs needs to do the reverse transformation. 
+#  Boxes [x_left_up, y_left_up, x_right_bottom, y_right_bottom], type float32 0...1. 
+#  So, for example above edge case box will be [0, 140/640, 1, 500/640] 
+#  Kpts 17x[x, y, v] type float32 0...1. v - visibility, 
+#  if v close to 0, point not visible on image(out of image). if v close to 1, point visible on image clearly. 
+#  Masks 160x160 type float32 0...1. For clear use, you need resize to 640x640 and take [top, bottom, left, right] part of mask. 
+#  After that you can resize mask to any size and than apply mask[mask>=0.5] = 1, mask[mask<0.5] = 0.
+#  Scores have value type float32 0...1. Close to 1 means highest confidence in prediction.
+#  Labels for current model always equals 0, because of only person class to predict.
+name: "yolov8_segpose_ensemble"
+platform: "ensemble"
+
+max_batch_size : 16
+
+input [
+  {
+    name: "images"
+    data_type: TYPE_FP32
+    dims: [ 3, 640, 640]
+  }
+]
+output [
+  {
+    name: "result_bboxes"
+    data_type: TYPE_FP32
+    dims: [ 100, 4 ]
+  },
+  {
+    name: "result_scores"
+    data_type: TYPE_FP32
+    dims: [ 100, 1 ]
+  },
+  {
+    name: "result_labels"
+    data_type: TYPE_FP32
+    dims: [ 100, 1 ]
+  },
+  {
+    name: "result_masks"
+    data_type: TYPE_FP32
+    dims: [ 100, 160, 160 ]
+  },
+  {
+    name: "result_kpts"
+    data_type: TYPE_FP32
+    dims: [ 100, 17, 3 ]
+  }
+]
+
+ensemble_scheduling {
+  step [
+    {
+      model_name: "yolov8_segpose_inference"
+      model_version: 1
+
+      input_map {
+        key: "images"
+        value: "images"
+      }
+
+      output_map {
+        key: "output0"
+        value: "output_inf_pred"
+      }
+
+      output_map {
+        key: "output1"
+        value: "output_inf_proto"
+      }
+    },
+    {
+      model_name: "yolov8_segpose_postprocessing"
+      model_version: 1
+
+      input_map {
+        key: "INPUT__0"
+        value: "output_inf_pred"
+      }
+      input_map {
+        key: "INPUT__1"
+        value: "output_inf_proto"
+      }
+      output_map {
+        key: "OUTPUT__0"
+        value: "result_bboxes"
+      }
+      output_map {
+        key: "OUTPUT__1"
+        value: "result_scores"
+      }
+      output_map {
+        key: "OUTPUT__2"
+        value: "result_labels"
+      }
+      output_map {
+        key: "OUTPUT__3"
+        value: "result_masks"
+      }
+      output_map {
+        key: "OUTPUT__4"
+        value: "result_kpts"
+      }
+    }
+  ]
+}
+
+
+
